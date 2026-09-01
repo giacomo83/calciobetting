@@ -56,6 +56,7 @@ for lg, paths in files.items():
                 "min": lg_data["Date"].min().strftime("%d/%m/%Y"),
                 "max": lg_data["Date"].max().strftime("%d/%m/%Y")
             }
+            lg_data["League"] = lg
             dfs.append(lg_data)
 
 if not dfs:
@@ -257,7 +258,7 @@ def dixon_coles_adjust(i, j, lh, la, rho=-0.10):
 # UI STREAMLIT
 # =========================
 
-st.title("⚽ CALCOLO QUOTE CALCIO ⚽")
+st.title("⚽ CALCOLO QUOTE CALCIO")
 st.caption("A cura di Giacomo Bertè, Luca Bertè, Antonio Bertè e Fabio Bertè")
 
 # 🟢 INDICATORE DETTAGLIATO PER CAMPIONATO
@@ -302,9 +303,9 @@ with col1:
     motivation_a = motivation_options[motivation_a_label]
 
     st.subheader("📊 QUOTE BOOKMAKERS")
-    odd_h = st.number_input("Casa", 1.01, 20.0, 2.0)
-    odd_d = st.number_input("X", 1.01, 20.0, 3.2)
-    odd_a = st.number_input("Ospite", 1.01, 20.0, 3.5)
+    odd_h = st.number_input("Casa", 0.0, 20.0, 0.0, step=0.01)
+    odd_d = st.number_input("X", 0.0, 20.0, 0.0, step=0.01)
+    odd_a = st.number_input("Ospite", 0.0, 20.0, 0.0, step=0.01)
 
     calc = st.button("🚀 ANALIZZA CONFRONTO")
 
@@ -350,66 +351,71 @@ with col2:
         st.write(f"🏠 {to_odds(h):.2f} | 🤝 {to_odds(d):.2f} | 🚗 {to_odds(a):.2f}")
 
         st.subheader("📊 QUOTE DEI BOOKMAKERS")
-        st.write(f"🏠 {odd_h:.2f} | 🤝 {odd_d:.2f} | 🚗 {odd_a:.2f}")
+        if odd_h > 0 and odd_d > 0 and odd_a > 0:
+            st.write(f"🏠 {odd_h:.2f} | 🤝 {odd_d:.2f} | 🚗 {odd_a:.2f}")
+        else:
+            st.info("ℹ️ Inserisci le quote dei bookmakers per visualizzarle e confrontarle.")
 
         st.subheader("💡 SUGGERIMENTI DEL MODELLO")
-        ev_h = (h * odd_h) - 1
-        ev_d = (d * odd_d) - 1
-        ev_a = (a * odd_a) - 1
+        if odd_h > 0 and odd_d > 0 and odd_a > 0:
+            ev_h = (h * odd_h) - 1
+            ev_d = (d * odd_d) - 1
+            ev_a = (a * odd_a) - 1
 
-        has_heavy_favorite_home = (odd_h <= 2.00)
-        has_heavy_favorite_away = (odd_a <= 2.00)
-        high_double_chance_active = (p_1x > 0.70) or (p_x2 > 0.70)
+            has_heavy_favorite_home = (odd_h <= 2.00)
+            has_heavy_favorite_away = (odd_a <= 2.00)
+            high_double_chance_active = (p_1x > 0.70) or (p_x2 > 0.70)
 
-        def display_safe_player_advice(ev, label, book_odd, target_type):
-            if high_double_chance_active:
-                if target_type == "h" and p_1x > 0.70:
-                    st.info(f"🛡️ **PRUDENZA SU {label}** — Il modello rileva un'alta copertura della doppia chance 1X ({p_1x*100:.1f}%). Meglio valutare la copertura o un esito prudente anziché la vittoria secca.")
-                elif target_type == "a" and p_x2 > 0.70:
-                    st.info(f"🛡️ **PRUDENZA SU {label}** — Il modello rileva un'alta copertura della doppia chance X2 ({p_x2*100:.1f}%). Il match è molto chiuso, valuta la copertura.")
+            def display_safe_player_advice(ev, label, book_odd, target_type):
+                if high_double_chance_active:
+                    if target_type == "h" and p_1x > 0.70:
+                        st.info(f"🛡️ **PRUDENZA SU {label}** — Il modello rileva un'alta copertura della doppia chance 1X ({p_1x*100:.1f}%). Meglio valutare la copertura o un esito prudente anziché la vittoria secca.")
+                    elif target_type == "a" and p_x2 > 0.70:
+                        st.info(f"🛡️ **PRUDENZA SU {label}** — Il modello rileva un'alta copertura della doppia chance X2 ({p_x2*100:.1f}%). Il match è molto chiuso, valuta la copertura.")
+                    else:
+                        st.warning(f"⚠️ **ATTENZIONE A {label}** — Elevato rischio di partita bloccata o pareggio in base ai flussi di probabilità.")
+                elif has_heavy_favorite_home or has_heavy_favorite_away:
+                    if book_odd <= 2.00:
+                        st.success(f"🔥 **FAVORITO DI MERCATO ({label})** — Questa squadra ha i favori netti dei bookmaker (quota <= 2.00). Il mercato la vede vincente, segui il trend principale.")
+                    else:
+                        st.warning(f"❌ **NON PUNTARE SU {label}** — C'è un chiaro favorito forte dall'altra parte. Sconsigliato andare contro il mercato in questa situazione.")
+                elif ev > 0.05:
+                    st.success(f"🎯 **PUNTA SU {label}** — Questa quota è un vero affare! L'Agenzia di Scommesse la paga di più rispetto al reale rischio.")
+                elif ev > 0:
+                    st.info(f"👍 **CI PUÒ STARE SU {label}** — C'è un piccolo vantaggio, puoi metterla nella tua schedina.")
                 else:
-                    st.warning(f"⚠️ **ATTENZIONE A {label}** — Elevato rischio di partita bloccata o pareggio in base ai flussi di probabilità.")
-            elif has_heavy_favorite_home or has_heavy_favorite_away:
-                if book_odd <= 2.00:
-                    st.success(f"🔥 **FAVORITO DI MERCATO ({label})** — Questa squadra ha i favori netti dei bookmaker (quota <= 2.00). Il mercato la vede vincente, segui il trend principale.")
-                else:
-                    st.warning(f"❌ **NON PUNTARE SU {label}** — C'è un chiaro favorito forte dall'altra parte. Sconsigliato andare contro il mercato in questa situazione.")
-            elif ev > 0.05:
-                st.success(f"🎯 **PUNTA SU {label}** — Questa quota è un vero affare! L'Agenzia di Scommesse la paga di più rispetto al reale rischio.")
-            elif ev > 0:
-                st.info(f"👍 **CI PUÒ STARE SU {label}** — C'è un piccolo vantaggio, puoi metterla nella tua schedina.")
+                    st.warning(f"🚫 **LASCIA PERDERE {label}** — Questa quota è troppo bassa rispetto alle reali probabilità. Ci guadagna solo l'Agenzia di Scommesse.")
+
+            display_safe_player_advice(ev_h, "Casa (1)", odd_h, "h")
+            display_safe_player_advice(ev_d, "Pareggio (X)", odd_d, "d")
+            display_safe_player_advice(ev_a, "Ospite (2)", odd_a, "a")
+
+            book_h = imp_prob(odd_h)
+            book_d = imp_prob(odd_d)
+            book_a = imp_prob(odd_a)
+            
+            error = np.mean([abs(h - book_h), abs(d - book_d), abs(a - book_a)])
+            confidence = max(0, 1 - error * 3)
+
+            st.subheader("🎯 CONFRONTO MODELLO-BOOKMAKERS")
+            st.markdown(f"<h1 style='text-align:center; color:#2ecc71;'>{confidence*100:.1f}%</h1>", unsafe_allow_html=True)
+
+            if confidence > 0.7:
+                st.success("🟢 QUOTE DEL MODELLO VICINE A QUELLE DEI BOOKMAKERS")
+            elif confidence > 0.4:
+                st.warning("🟡 QUOTE DEL MODELLO INCERTE")
             else:
-                st.warning(f"🚫 **LASCIA PERDERE {label}** — Questa quota è troppo bassa rispetto alle reali probabilità. Ci guadagna solo l'Agenzia di Scommesse.")
-
-        display_safe_player_advice(ev_h, "Casa (1)", odd_h, "h")
-        display_safe_player_advice(ev_d, "Pareggio (X)", odd_d, "d")
-        display_safe_player_advice(ev_a, "Ospite (2)", odd_a, "a")
-
-        book_h = imp_prob(odd_h)
-        book_d = imp_prob(odd_d)
-        book_a = imp_prob(odd_a)
-        
-        error = np.mean([abs(h - book_h), abs(d - book_d), abs(a - book_a)])
-        confidence = max(0, 1 - error * 3)
-
-        st.subheader("🎯 CONFRONTO MODELLO-BOOKMAKERS")
-        st.markdown(f"<h1 style='text-align:center; color:#2ecc71;'>{confidence*100:.1f}%</h1>", unsafe_allow_html=True)
-
-        if confidence > 0.7:
-            st.success("🟢 QUOTE DEL MODELLO VICINE A QUELLE DEI BOOKMAKERS")
-        elif confidence > 0.4:
-            st.warning("🟡 QUOTE DEL MODELLO INCERTE")
+                st.error("🔴 QUOTE DEL MODELLO LONTANE DA QUELLE DEI BOOKMAKERS")
+                st.warning(
+                    "🚨 **ATTENZIONE VALUTARE CAUTELA**\n\n"
+                    "Calcolata probabilità **totalmente diversa** rispetto all'Agenzia di Scommesse. "
+                    "Questo può significare che:\n"
+                    "1. **Super Value Bet:** Il modello ha individuato una quota sottovalutata dall'Agenzia di Scommesse.\n"
+                    "2. **Informazione Mancante:** C'è un fattore critico (infortunio last-minute, turnover pesante, ecc.) che il modello statistico non può intercettare.\n\n"
+                    "💡 *Consiglio di tutela:* Se decidi di seguire l'intuizione del modello su quote così distanti, **punta cifre simboliche o valuta coperture (Doppia Chance / Handicap)**."
+                )
         else:
-            st.error("🔴 QUOTE DEL MODELLO LONTANE DA QUELLE DEI BOOKMAKERS")
-            # 🛡️ TUTELA AGGIUNTIVA PER L'UTENTE E IL MODELLO IN CASO DI FORTE DIVERGENZA
-            st.warning(
-                "🚨 **ATTENZIONE VALUTARE CAUTELA**\n\n"
-                "Calcolata probabilità **totalmente diversa** rispetto all'Agenzia di Scommesse. "
-                "Questo può significare che:\n"
-                "1. **Super Value Bet:** Il modello ha individuato una quota sottovalutata dall'Agenzia di Scommesse.\n"
-                "2. **Informazione Mancante:** C'è un fattore critico (infortunio last-minute, turnover pesante, ecc.) che il modello statistico non può intercettare.\n\n"
-                "💡 *Consiglio di tutela:* Se decidi di seguire l'intuizione del modello su quote così distanti, **punta cifre simboliche o valuta coperture (Doppia Chance / Handicap)**."
-            )
+            st.info("ℹ️ Inserisci le quote dei bookmakers per attivare i suggerimenti e il confronto del modello.")
 
         st.markdown("---")
         st.subheader("📊 ULTERIORI PROBABILITÀ")
@@ -422,33 +428,82 @@ with col2:
         st.write(f"📉 Under 2.5: {p_under25*100:.1f}%")
         st.write(f"🤝 Goal/Goal: {p_btts*100:.1f}%")
 
-        score_probs = {}
-        total_score_prob = 0
-
-        for i in range(max_goals):
-            for j in range(max_goals):
-                p = poisson_pmf(i, lh) * poisson_pmf(j, la)
-                p *= dixon_coles_adjust(i, j, lh, la)
-                score_probs[(i, j)] = p
-                total_score_prob += p
-
-        if total_score_prob > 0:
-            for k in score_probs:
-                score_probs[k] /= total_score_prob
-
-        top_scores = sorted(score_probs.items(), key=lambda x: x[1], reverse=True)
-        best_score = top_scores[0]
-
-        st.subheader("🎯 RISULTATO ESATTO PIÙ PROBABILE")
-        st.write(f"🔥 ESITO PIÙ ATTESO: {best_score[0][0]}-{best_score[0][1]} ({best_score[1]*100:.2f}%)")
-
-        st.markdown("### 🧾 Top 5 risultati esatti")
-        for (sh_score, sa_score), p in top_scores[:5]:
-            st.write(f"{sh_score}-{sa_score} → {p*100:.2f}%")
-
-        top5_prob = sum([p for (_, p) in top_scores[:5]])
         st.markdown("---")
         
-        st.subheader("🧠 CONSIGLI UTILI PER LA TUA SCHEDINA")
-        st.write(f"• **Risultati Esatti:** I primi 5 risultati coprono il {top5_prob*100:.1f}% delle possibilità.")
-        st.write("• **Aggiornamento Sincronizzato:** Ciascun campionato mostra la propria copertura temporale indipendente.")
+        # =========================
+        # SEZIONE PARTITE STAGIONE 2026/2027 (DA AGOSTO 2026) SENZA MENU A TENDINA
+        # =========================
+
+        # --- SEZIONE SQUADRA DI CASA ---
+        st.subheader(f"📅 ULTIME PARTITE: {home}")
+        
+        matches_home_26_27 = data[
+            ((data["HomeTeam"] == home) | (data["AwayTeam"] == home)) &
+            (data["Date"] >= pd.Timestamp("2026-08-01"))
+        ].sort_values("Date", ascending=False)
+
+        if not matches_home_26_27.empty:
+            for _, row in matches_home_26_27.iterrows():
+                date_str = row["Date"].strftime("%d/%m/%Y")
+                h_team = row["HomeTeam"]
+                a_team = row["AwayTeam"]
+                score_h = int(row["FTHG"])
+                score_a = int(row["FTAG"])
+                
+                # Assegnazione pallino dal punto di vista della squadra 'home'
+                if h_team == home:
+                    if score_h > score_a:
+                        bullet = "🟢" # Vittoria
+                    elif score_h == score_a:
+                        bullet = "🟡" # Pareggio
+                    else:
+                        bullet = "🔴" # Sconfitta
+                else:
+                    if score_a > score_h:
+                        bullet = "🟢" # Vittoria
+                    elif score_a == score_h:
+                        bullet = "🟡" # Pareggio
+                    else:
+                        bullet = "🔴" # Sconfitta
+
+                st.write(f"{bullet} **{date_str}** — {h_team} vs {a_team}: **{score_h}-{score_a}**")
+        else:
+            st.info(f"Nessuna partita registrata per {home} da agosto 2026.")
+
+        st.markdown("---")
+
+        # --- SEZIONE SQUADRA OSPITE ---
+        st.subheader(f"📅 ULTIME PARTITE: {away}")
+        
+        matches_away_26_27 = data[
+            ((data["HomeTeam"] == away) | (data["AwayTeam"] == away)) &
+            (data["Date"] >= pd.Timestamp("2026-08-01"))
+        ].sort_values("Date", ascending=False)
+
+        if not matches_away_26_27.empty:
+            for _, row in matches_away_26_27.iterrows():
+                date_str = row["Date"].strftime("%d/%m/%Y")
+                h_team = row["HomeTeam"]
+                a_team = row["AwayTeam"]
+                score_h = int(row["FTHG"])
+                score_a = int(row["FTAG"])
+                
+                # Assegnazione pallino dal punto di vista della squadra 'away'
+                if h_team == away:
+                    if score_h > score_a:
+                        bullet = "🟢" # Vittoria
+                    elif score_h == score_a:
+                        bullet = "🟡" # Pareggio
+                    else:
+                        bullet = "🔴" # Sconfitta
+                else:
+                    if score_a > score_h:
+                        bullet = "🟢" # Vittoria
+                    elif score_a == score_h:
+                        bullet = "🟡" # Pareggio
+                    else:
+                        bullet = "🔴" # Sconfitta
+
+                st.write(f"{bullet} **{date_str}** — {h_team} vs {a_team}: **{score_h}-{score_a}**")
+        else:
+            st.info(f"Nessuna partita registrata per {away} da agosto 2026.")
