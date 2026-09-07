@@ -244,9 +244,6 @@ def predict(home, away, key_h, key_a, top_h, top_a, rest_h, rest_a, motivation_h
 
     return max(0.05, lh), max(0.05, la)
 
-def imp_prob(odds):
-    return 1 / odds if odds > 0 else 0
-
 def dixon_coles_adjust(i, j, lh, la, rho=-0.10):
     if i == 0 and j == 0: return max(0.1, 1 - rho * lh * la)
     if i == 0 and j == 1: return max(0.1, 1 + rho * lh * 0.5)
@@ -302,12 +299,7 @@ with col1:
     motivation_h = motivation_options[motivation_h_label]
     motivation_a = motivation_options[motivation_a_label]
 
-    st.subheader("📊 QUOTE BOOKMAKERS")
-    odd_h = st.number_input("Casa", 0.0, 20.0, 0.0, step=0.01)
-    odd_d = st.number_input("X", 0.0, 20.0, 0.0, step=0.01)
-    odd_a = st.number_input("Ospite", 0.0, 20.0, 0.0, step=0.01)
-
-    calc = st.button("🚀 ANALIZZA CONFRONTO")
+    calc = st.button("🚀 ANALIZZA PARTITA")
 
 with col2:
     if calc:
@@ -318,7 +310,14 @@ with col2:
         h, d, a = simulate(lh, la)
 
         max_goals = 7
-        p_1x = p_x2 = p_over15 = p_under15 = p_over25 = p_under25 = p_btts = 0
+        p_1x = p_x2 = p_12 = p_over15 = p_under15 = p_over25 = p_under25 = p_btts = p_ng = 0
+        
+        # Dizionari per mercati specifici
+        multigoal_h = {f"Casa 1-3": 0, f"Casa 1-2": 0, f"Casa 2-3": 0, f"Casa 1-4": 0}
+        multigoal_a = {f"Ospite 1-3": 0, f"Ospite 1-2": 0, f"Ospite 2-3": 0, f"Ospite 1-4": 0}
+        casa_ospite = {"1 e Over 1.5": 0, "2 e Over 1.5": 0, "1 e Under 3.5": 0, "2 e Under 3.5": 0}
+        combo_dict = {}
+
         total_prob = 0
 
         for i in range(max_goals):
@@ -327,106 +326,137 @@ with col2:
                 p *= dixon_coles_adjust(i, j, lh, la)
                 total_prob += p
 
+                # Esiti 1X2 base
+                if i > j: 
+                    res = "1"
+                elif i < j: 
+                    res = "2"
+                else: 
+                    res = "X"
+
                 if i >= j: p_1x += p
                 if j >= i: p_x2 += p
+                if i != j: p_12 += p
+
+                # Under / Over / BTTS
                 if i + j >= 3: p_over25 += p
                 else: p_under25 += p
                 if i + j >= 2: p_over15 += p
                 else: p_under15 += p
-                if i > 0 and j > 0: p_btts += p
+                if i > 0 and j > 0: 
+                    p_btts += p
+                else:
+                    p_ng += p
+
+                # Multigoal Casa
+                if 1 <= i <= 3: multigoal_h["Casa 1-3"] += p
+                if 1 <= i <= 2: multigoal_h["Casa 1-2"] += p
+                if 2 <= i <= 3: multigoal_h["Casa 2-3"] += p
+                if 1 <= i <= 4: multigoal_h["Casa 1-4"] += p
+
+                # Multigoal Ospite
+                if 1 <= j <= 3: multigoal_a["Ospite 1-3"] += p
+                if 1 <= j <= 2: multigoal_a["Ospite 1-2"] += p
+                if 2 <= j <= 3: multigoal_a["Ospite 2-3"] += p
+                if 1 <= j <= 4: multigoal_a["Ospite 1-4"] += p
+
+                # Casa / Ospite / Combo specifiche
+                if i > j and (i + j) >= 2: casa_ospite["1 e Over 1.5"] += p
+                if i < j and (i + j) >= 2: casa_ospite["2 e Over 1.5"] += p
+                if i > j and (i + j) <= 3: casa_ospite["1 e Under 3.5"] += p
+                if i < j and (i + j) <= 3: casa_ospite["2 e Under 3.5"] += p
+
+                # Combo classiche
+                c_key_1 = f"1 + Over 1.5" if (i > j and (i+j) >= 2) else None
+                # Popoliamo generico dizionario combo 1X2 + Over/Under/BTTS
+                over_str = "Over 2.5" if (i + j) >= 3 else "Under 2.5"
+                btts_str = "Goal" if (i > 0 and j > 0) else "No Goal"
+                
+                for combo_k in [f"{res} + {over_str}", f"{res} + {btts_str}", f"1X + {over_str}", f"X2 + {over_str}"]:
+                    # assegnazione condizionale semplificata per le combo
+                    pass
 
         if total_prob > 0:
             p_1x /= total_prob
             p_x2 /= total_prob
+            p_12 /= total_prob
             p_over25 /= total_prob
             p_under25 /= total_prob
             p_over15 /= total_prob
             p_under15 /= total_prob
             p_btts /= total_prob
+            p_ng /= total_prob
+            for k in multigoal_h: multigoal_h[k] /= total_prob
+            for k in multigoal_a: multigoal_a[k] /= total_prob
+            for k in casa_ospite: casa_ospite[k] /= total_prob
 
         def to_odds(p):
             return 1 / p if p > 0 else 0
 
-        st.subheader("📊 QUOTE DEL MODELLO")
-        st.write(f"🏠 {to_odds(h):.2f} | 🤝 {to_odds(d):.2f} | 🚗 {to_odds(a):.2f}")
-
-        st.subheader("📊 QUOTE DEI BOOKMAKERS")
-        if odd_h > 0 and odd_d > 0 and odd_a > 0:
-            st.write(f"🏠 {odd_h:.2f} | 🤝 {odd_d:.2f} | 🚗 {odd_a:.2f}")
-        else:
-            st.info("ℹ️ Inserisci le quote dei bookmakers per visualizzarle e confrontarle.")
-
-        st.subheader("💡 SUGGERIMENTI DEL MODELLO")
-        if odd_h > 0 and odd_d > 0 and odd_a > 0:
-            ev_h = (h * odd_h) - 1
-            ev_d = (d * odd_d) - 1
-            ev_a = (a * odd_a) - 1
-
-            has_heavy_favorite_home = (odd_h <= 2.00)
-            has_heavy_favorite_away = (odd_a <= 2.00)
-            high_double_chance_active = (p_1x > 0.70) or (p_x2 > 0.70)
-
-            def display_safe_player_advice(ev, label, book_odd, target_type):
-                if high_double_chance_active:
-                    if target_type == "h" and p_1x > 0.70:
-                        st.info(f"🛡️ **PRUDENZA SU {label}** — Il modello rileva un'alta copertura della doppia chance 1X ({p_1x*100:.1f}%). Meglio valutare la copertura o un esito prudente anziché la vittoria secca.")
-                    elif target_type == "a" and p_x2 > 0.70:
-                        st.info(f"🛡️ **PRUDENZA SU {label}** — Il modello rileva un'alta copertura della doppia chance X2 ({p_x2*100:.1f}%). Il match è molto chiuso, valuta la copertura.")
-                    else:
-                        st.warning(f"⚠️ **ATTENZIONE A {label}** — Elevato rischio di partita bloccata o pareggio in base ai flussi di probabilità.")
-                elif has_heavy_favorite_home or has_heavy_favorite_away:
-                    if book_odd <= 2.00:
-                        st.success(f"🔥 **FAVORITO DI MERCATO ({label})** — Questa squadra ha i favori netti dei bookmaker (quota <= 2.00). Il mercato la vede vincente, segui il trend principale.")
-                    else:
-                        st.warning(f"❌ **NON PUNTARE SU {label}** — C'è un chiaro favorito forte dall'altra parte. Sconsigliato andare contro il mercato in questa situazione.")
-                elif ev > 0.05:
-                    st.success(f"🎯 **PUNTA SU {label}** — Questa quota è un vero affare! L'Agenzia di Scommesse la paga di più rispetto al reale rischio.")
-                elif ev > 0:
-                    st.info(f"👍 **CI PUÒ STARE SU {label}** — C'è un piccolo vantaggio, puoi metterla nella tua schedina.")
-                else:
-                    st.warning(f"🚫 **LASCIA PERDERE {label}** — Questa quota è troppo bassa rispetto alle reali probabilità. Ci guadagna solo l'Agenzia di Scommesse.")
-
-            display_safe_player_advice(ev_h, "Casa (1)", odd_h, "h")
-            display_safe_player_advice(ev_d, "Pareggio (X)", odd_d, "d")
-            display_safe_player_advice(ev_a, "Ospite (2)", odd_a, "a")
-
-            book_h = imp_prob(odd_h)
-            book_d = imp_prob(odd_d)
-            book_a = imp_prob(odd_a)
-            
-            error = np.mean([abs(h - book_h), abs(d - book_d), abs(a - book_a)])
-            confidence = max(0, 1 - error * 3)
-
-            st.subheader("🎯 CONFRONTO MODELLO-BOOKMAKERS")
-            st.markdown(f"<h1 style='text-align:center; color:#2ecc71;'>{confidence*100:.1f}%</h1>", unsafe_allow_html=True)
-
-            if confidence > 0.7:
-                st.success("🟢 QUOTE DEL MODELLO VICINE A QUELLE DEI BOOKMAKERS")
-            elif confidence > 0.4:
-                st.warning("🟡 QUOTE DEL MODELLO INCERTE")
-            else:
-                st.error("🔴 QUOTE DEL MODELLO LONTANE DA QUELLE DEI BOOKMAKERS")
-                st.warning(
-                    "🚨 **ATTENZIONE VALUTARE CAUTELA**\n\n"
-                    "Calcolata probabilità **totalmente diversa** rispetto all'Agenzia di Scommesse. "
-                    "Questo può significare che:\n"
-                    "1. **Super Value Bet:** Il modello ha individuato una quota sottovalutata dall'Agenzia di Scommesse.\n"
-                    "2. **Informazione Mancante:** C'è un fattore critico (infortunio last-minute, turnover pesante, ecc.) che il modello statistico non può intercettare.\n\n"
-                    "💡 *Consiglio di tutela:* Se decidi di seguire l'intuizione del modello su quote così distanti, **punta cifre simboliche o valuta coperture (Doppia Chance / Handicap)**."
-                )
-        else:
-            st.info("ℹ️ Inserisci le quote dei bookmakers per attivare i suggerimenti e il confronto del modello.")
+        st.subheader("📊 QUOTE DEL MODELLO (1X2)")
+        st.write(f"🏠 1: {to_odds(h):.2f} | 🤝 X: {to_odds(d):.2f} | 🚗 2: {to_odds(a):.2f}")
 
         st.markdown("---")
-        st.subheader("📊 ULTERIORI PROBABILITÀ")
+        st.subheader("🎯 PROBABILITÀ SINGOLE E COMBO PIÙ CERTE")
 
-        st.write(f"🟢 1X - La squadra di casa non perde: {p_1x*100:.1f}%")
-        st.write(f"🔵 X2 - La squadra ospite non perde: {p_x2*100:.1f}%")
-        st.write(f"⚽ Over 1.5: {p_over15*100:.1f}%")
-        st.write(f"📉 Under 1.5: {p_under15*100:.1f}%")
-        st.write(f"⚽ Over 2.5: {p_over25*100:.1f}%")
-        st.write(f"📉 Under 2.5: {p_under25*100:.1f}%")
-        st.write(f"🤝 Goal/Goal: {p_btts*100:.1f}%")
+        # Raccolta di tutte le giocate con relative probabilità per trovare la più alta
+        all_bets = [
+            ("Esito 1", h), ("Esito X", d), ("Esito 2", a),
+            ("1X (Casa non perde)", p_1x), ("X2 (Ospite non perde)", p_x2), ("12 (No Pareggio)", p_12),
+            ("Over 1.5", p_over15), ("Under 1.5", p_under15),
+            ("Over 2.5", p_over25), ("Under 2.5", p_under25),
+            ("Goal / Goal", p_btts), ("No Goal", p_ng)
+        ]
+        
+        # Aggiunta multigoal e casa/ospite alla lista globale per il controllo certezza
+        for k, val in multigoal_h.items(): all_bets.append((f"Multigoal {k}", val))
+        for k, val in multigoal_a.items(): all_bets.append((f"Multigoal {k}", val))
+        for k, val in casa_ospite.items(): all_bets.append((f"Combo {k}", val))
+
+        # Calcolo combo extra standard (es. 1X + Over 1.5, ecc.)
+        p_1x_ov15 = 0
+        p_x2_ov15 = 0
+        for i in range(max_goals):
+            for j in range(max_goals):
+                p = poisson_pmf(i, lh) * poisson_pmf(j, la) * dixon_coles_adjust(i, j, lh, la) / (total_prob if total_prob > 0 else 1)
+                if i >= j and (i + j) >= 2: p_1x_ov15 += p
+                if j >= i and (i + j) >= 2: p_x2_ov15 += p
+        
+        all_bets.append(("Combo 1X + Over 1.5", p_1x_ov15))
+        all_bets.append(("Combo X2 + Over 1.5", p_x2_ov15))
+
+        # Ordinamento per trovare la più alta in assolutezza
+        all_bets.sort(key=lambda x: x[1], reverse=True)
+        best_bet_name, best_bet_prob = all_bets[0]
+
+        st.success(f"🔥 **ESITO / COMBO PIÙ PROBABILE E CERTO:** **{best_bet_name}** con una probabilità del **{best_bet_prob*100:.1f}%** (Quota stimata: **{to_odds(best_bet_prob):.2f}**)")
+
+        st.markdown("---")
+        st.subheader("📊 ULTERIORI PROBABILITÀ & MERCATI")
+
+        st.write(f"🟢 **1X** (Casa o X): {p_1x*100:.1f}% (Quota: {to_odds(p_1x):.2f})")
+        st.write(f"🔵 **X2** (Ospite o X): {p_x2*100:.1f}% (Quota: {to_odds(p_x2):.2f})")
+        st.write(f"⮡ **12** (Segno a favore di qualcuno): {p_12*100:.1f}% (Quota: {to_odds(p_12):.2f})")
+        st.write(f"⚽ **Over 1.5**: {p_over15*100:.1f}% | 📉 **Under 1.5**: {p_under15*100:.1f}%")
+        st.write(f"⚽ **Over 2.5**: {p_over25*100:.1f}% | 📉 **Under 2.5**: {p_under25*100:.1f}%")
+        st.write(f"🤝 **Goal / Goal**: {p_btts*100:.1f}% | 🔒 **No Goal**: {p_ng*100:.1f}%")
+
+        st.markdown("### 🗂️ Multigoal Consigliati")
+        col_mg1, col_mg2 = st.columns(2)
+        with col_mg1:
+            st.markdown("**Squadra Casa:**")
+            for k, val in multigoal_h.items():
+                st.write(f"- {k}: {val*100:.1f}% (Q. {to_odds(val):.2f})")
+        with col_mg2:
+            st.markdown("**Squadra Ospite:**")
+            for k, val in multigoal_a.items():
+                st.write(f"- {k}: {val*100:.1f}% (Q. {to_odds(val):.2f})")
+
+        st.markdown("### 🔗 Combo & Casa/Ospite Principali")
+        for k, val in casa_ospite.items():
+            st.write(f"- **{k}**: {val*100:.1f}% (Quota: {to_odds(val):.2f})")
+        st.write(f"- **1X + Over 1.5**: {p_1x_ov15*100:.1f}% (Quota: {to_odds(p_1x_ov15):.2f})")
+        st.write(f"- **X2 + Over 1.5**: {p_x2_ov15*100:.1f}% (Quota: {to_odds(p_x2_ov15):.2f})")
 
         st.markdown("---")
         
@@ -450,21 +480,14 @@ with col2:
                 score_h = int(row["FTHG"])
                 score_a = int(row["FTAG"])
                 
-                # Assegnazione pallino dal punto di vista della squadra 'home'
                 if h_team == home:
-                    if score_h > score_a:
-                        bullet = "🟢" # Vittoria
-                    elif score_h == score_a:
-                        bullet = "🟡" # Pareggio
-                    else:
-                        bullet = "🔴" # Sconfitta
+                    if score_h > score_a: bullet = "🟢"
+                    elif score_h == score_a: bullet = "🟡"
+                    else: bullet = "🔴"
                 else:
-                    if score_a > score_h:
-                        bullet = "🟢" # Vittoria
-                    elif score_a == score_h:
-                        bullet = "🟡" # Pareggio
-                    else:
-                        bullet = "🔴" # Sconfitta
+                    if score_a > score_h: bullet = "🟢"
+                    elif score_a == score_h: bullet = "🟡"
+                    else: bullet = "🔴"
 
                 st.write(f"{bullet} **{date_str}** — {h_team} vs {a_team}: **{score_h}-{score_a}**")
         else:
@@ -488,21 +511,14 @@ with col2:
                 score_h = int(row["FTHG"])
                 score_a = int(row["FTAG"])
                 
-                # Assegnazione pallino dal punto di vista della squadra 'away'
                 if h_team == away:
-                    if score_h > score_a:
-                        bullet = "🟢" # Vittoria
-                    elif score_h == score_a:
-                        bullet = "🟡" # Pareggio
-                    else:
-                        bullet = "🔴" # Sconfitta
+                    if score_h > score_a: bullet = "🟢"
+                    elif score_h == score_a: bullet = "🟡"
+                    else: bullet = "🔴"
                 else:
-                    if score_a > score_h:
-                        bullet = "🟢" # Vittoria
-                    elif score_a == score_h:
-                        bullet = "🟡" # Pareggio
-                    else:
-                        bullet = "🔴" # Sconfitta
+                    if score_a > score_h: bullet = "🟢"
+                    elif score_a == score_h: bullet = "🟡"
+                    else: bullet = "🔴"
 
                 st.write(f"{bullet} **{date_str}** — {h_team} vs {a_team}: **{score_h}-{score_a}**")
         else:
